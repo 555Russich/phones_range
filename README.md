@@ -2,7 +2,7 @@ This repository can help you scrap possible phone numbers,
 generate password dict based on scrapped phones ranges 
 to crack with `hashcat` or similar tool.
 
-Only russian numbers with `+7` code
+### Now supports only `+7` code
 
 #### Preamble
 Crack all phone's range using GPU such as `GTX 960 4gb` taking about 
