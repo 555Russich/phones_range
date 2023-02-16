@@ -26,9 +26,11 @@ def create_filtered_dict(data: dict, args) -> list:
     code_ranges = []
     for code, lst, in data.items():
         for d in lst:
+            if not args.code and not args.region and not args.operator:
+                code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
+
             region = d['Регион РФ']
             operator_ = d.get('Оператор')
-
             if code in args.code:
                 if not args.region and not args.operator or \
                         region in args.region and not args.operator or \
@@ -89,10 +91,6 @@ def main():
         check_filter_values(args.region, get_list_of_key(data, 'Регион РФ'))
     if args.operator:
         check_filter_values(args.operator, get_list_of_key(data, 'Оператор'))
-
-    if not args.code and not args.region and not args.operator:
-        print('No one filter was selected, exiting...')
-        exit()
 
     filepath_dict = Path('phones_filtered.dict')
     if filepath_dict.exists():
