@@ -57,8 +57,11 @@ def create_dict(codes_data: list, filepath: Path):
     with open(filepath, 'a', encoding='utf-8') as f:
         for t in codes_data:
             for code_range in t[1]:
-                for n in range(code_range[0], code_range[1]+1):
-                    f.write(f'{t[0]}{n}\n')
+                for n in range(
+                        int(t[0] + '{:<07d}'.format(code_range[0])),
+                        int(t[0] + str(code_range[1])) + 1
+                ):
+                    f.write(f'{n}\n')
 
 
 def main():
@@ -74,16 +77,20 @@ def main():
     parser.add_argument('-r', '--region', action='append', default=[])
     parser.add_argument('-o', '--operator', action='append', default=[])
     args = parser.parse_args()
+    args = argparse.Namespace(list_codes=False, list_regions=False, list_operators=False, code=[], region=['Московская область и г. Москва'], operator=[])
 
     if args.list_codes:
         for v in data.keys():
             print(v)
+        exit()
     if args.list_regions:
         for v in get_list_of_key(data, 'Регион РФ'):
             print(v)
+        exit()
     if args.list_operators:
         for v in get_list_of_key(data, 'Оператор'):
             print(v)
+        exit()
 
     if args.code:
         check_filter_values(args.codes, data.keys())
