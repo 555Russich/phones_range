@@ -72,7 +72,7 @@ All operators to stdout:
 
 `python3 gen_dict.py --list-operators` 
 
-It's possible to combine filters
+It's possible to combine filters and pass few values for one filter
 
 Generated dict will look like that:
 
