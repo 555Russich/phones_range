@@ -77,7 +77,6 @@ def main():
     parser.add_argument('-r', '--region', action='append', default=[])
     parser.add_argument('-o', '--operator', action='append', default=[])
     args = parser.parse_args()
-    args = argparse.Namespace(list_codes=False, list_regions=False, list_operators=False, code=[], region=['Московская область и г. Москва'], operator=[])
 
     if args.list_codes:
         for v in data.keys():
