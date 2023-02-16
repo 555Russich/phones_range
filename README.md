@@ -29,7 +29,7 @@ pip3 install bs4 requests
 
 ### Usage
 
-1. Scrap possible phone ranges in `json`
+1. Scrap possible phone ranges in `json` from https://codificator.ru
 ``` commandline
 python3 scrap_phone_codes.py
 ```
