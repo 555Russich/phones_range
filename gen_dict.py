@@ -23,33 +23,19 @@ def check_filter_values(values: list, available_values: list):
 
 
 def create_filtered_dict(data: dict, args) -> list:
+    # Match a range when it satisfies every filter that was given (AND across
+    # code/region/operator; OR within one, since each is a list). An empty
+    # filter matches everything.
     code_ranges = []
-    for code, lst, in data.items():
+    for code, lst in data.items():
+        if args.code and code not in args.code:
+            continue
         for d in lst:
-            if not args.code and not args.region and not args.operator:
-                code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
-
-            region = d['Регион РФ']
-            operator_ = d.get('Оператор')
-            if code in args.code:
-                if not args.region and not args.operator or \
-                        region in args.region and not args.operator or \
-                        not args.region and operator_ in args.operator or \
-                        region in args.region and operator_ in args.operator:
-                    code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
-            elif region in args.region:
-                if not args.code and not args.operator or \
-                        code in args.code and not args.operator or \
-                        not args.code and operator_ in args.operator or \
-                        code in args.code and operator_ in args.operator:
-                    code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
-            elif operator_ in args.operator:
-                if not args.code and not args.region or \
-                        code in args.code and not args.region or \
-                        not args.code and region in args.region or \
-                        code in args.code and region in args.region:
-                    code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
-
+            if args.region and d['Регион РФ'] not in args.region:
+                continue
+            if args.operator and d.get('Оператор') not in args.operator:
+                continue
+            code_ranges.append((code, d['Диапазон номеров'], d['Кол-во номеров']))
     return sorted(code_ranges, key=lambda x: x[2], reverse=True)
 
 
@@ -58,8 +44,8 @@ def create_dict(codes_data: list, filepath: Path):
         for t in codes_data:
             for code_range in t[1]:
                 for n in range(
-                        int(t[0] + '{:<07d}'.format(code_range[0])),
-                        int(t[0] + str(code_range[1])) + 1
+                        int(t[0] + '{:07d}'.format(code_range[0])),
+                        int(t[0] + '{:07d}'.format(code_range[1])) + 1
                 ):
                     f.write(f'{n}\n')
 
@@ -92,7 +78,7 @@ def main():
         exit()
 
     if args.code:
-        check_filter_values(args.codes, data.keys())
+        check_filter_values(args.code, data.keys())
     if args.region:
         check_filter_values(args.region, get_list_of_key(data, 'Регион РФ'))
     if args.operator:

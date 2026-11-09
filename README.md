@@ -13,26 +13,33 @@ If you know region OR mobile operator OR code which that phone can use,
 you can generate possible phones based on this information.</b>
 
 ### Requirements
-`python3`
+`python3` (stdlib only).
 
-packages:
-`bs4`,
-`requests`
+`requests` is optional — only for the best-effort auto-download in step 1.
 
 ### Installation
 
 ``` commandline
 git clone https://github.com/555Russich/phones_range
 cd phones_range
-pip3 install bs4 requests
 ```
 
 ### Usage
 
-1. Scrap possible phone ranges in `json` from https://codificator.ru
+1. Get phone ranges as `json` from the official numbering registry.
+
+   The old source (codificator.ru) is now behind a captcha, so this uses the
+   authoritative **"Выписка из реестра Российской системы и плана нумерации"**
+   published by Минцифры России. Download `DEF-9xx.csv` (the 9xx mobile block) from:
+
+   https://opendata.digital.gov.ru/registry/numeric/downloads/
+
+   then convert it:
 ``` commandline
-python3 scrap_phone_codes.py
+python3 scrap_phone_codes.py DEF-9xx.csv
 ```
+   Run with no argument to attempt an auto-download (`pip3 install requests` first);
+   the portal often blocks it, in which case download the file in a browser as above.
 
 2. Generate password dict based on `json` file. Filters can be passed as arguments
 
