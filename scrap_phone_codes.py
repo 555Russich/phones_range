@@ -1,108 +1,94 @@
+"""Build phone_codes.json from the official DEF-9xx numbering-plan CSV.
+
+Source: "Выписка из реестра Российской системы и плана нумерации" published by
+Минцифры России (opendata.digital.gov.ru) — the authoritative list of 9xx
+mobile ranges allocated to operators. Public allocation data, no personal info.
+
+codificator.ru (the old source) is now behind a captcha, so this reads the
+official CSV instead. The portal gates automated downloads and serves TLS via
+the Russian national CA, so the reliable path is: download DEF-9xx.csv in a
+browser, then pass it here. A best-effort auto-download is attempted first.
+
+    python scrap_phone_codes.py [path/to/DEF-9xx.csv]   # default: ./DEF-9xx.csv
+"""
+import csv
 import json
-import re
-from datetime import datetime
+import sys
+from datetime import date
 from pathlib import Path
 
-import requests
-from bs4 import BeautifulSoup
-
-
-DOMAIN = 'https://codificator.ru'
 FILEPATH_JSON = Path('phone_codes.json')
+DEFAULT_CSV = Path('DEF-9xx.csv')
+SOURCE_URL = 'https://opendata.digital.gov.ru/downloads/DEF-9xx.csv'
+SOURCE_PAGE = 'https://opendata.digital.gov.ru/registry/numeric/downloads/'
 
 
 def ask_user(question: str) -> bool:
-    answer = input(f'{question}: ')
-    while True:
-        if answer == 'y':
-            return True
-        elif answer == 'n':
-            return False
-        else:
-            answer = input('Enter y(es) or n(o): ')
+    answer = input(f'{question} [y/n]: ').strip().lower()
+    while answer not in ('y', 'n'):
+        answer = input('Enter y(es) or n(o): ').strip().lower()
+    return answer == 'y'
 
 
-def is_update_needed(date_website: datetime) -> bool:
-    if FILEPATH_JSON.exists():
-        with open(FILEPATH_JSON, 'r', encoding='utf-8') as f:
-            date_infile = datetime.strptime(json.load(f)['last_update'], '%d.%m.%Y')
-        print(f'Date on website  : {date_website.strftime("%d.%m.%Y")}\n'
-              f'Date in json file: {date_infile.strftime("%d.%m.%Y")}')
-        if date_website > date_infile:
-            return ask_user('Run scrapper to update info?')
-        return False
-    else:
-        return True
+def _rows_from_csv(path: Path):
+    # Official file: Windows-1251, ';'-separated, one header row.
+    # Parsed by column position (code;from;to;capacity;operator;region;...)
+    # so it survives header-text changes.
+    with open(path, encoding='cp1251', newline='') as f:
+        next(f, None)  # header
+        for row in csv.reader(f, delimiter=';'):
+            if len(row) < 6:
+                continue
+            code, frm, to, cap, operator, region = (c.strip() for c in row[:6])
+            if not (code.isdigit() and frm.isdigit() and to.isdigit()):
+                continue
+            yield code, int(frm), int(to), int(cap) if cap.isdigit() else int(to) - int(frm) + 1, operator, region
 
-def scrap_codes_info(soup: BeautifulSoup) -> dict:
+
+def csv_to_data(path: Path) -> dict:
     data = {}
-    extra_codes = re.findall(r'\d{3}', soup.find('div', class_='d-flex flex-wrap gap-5').find_next_sibling('p').text)
-    extra_codes += [
-        code.strip()
-        for tr in soup.find_all('table', class_='table table-bordered table-width-auto')[1].tbody.find_all('tr')[1:]
-        for code in tr.find_all('td')[1].text.split(',')
-    ]
-    do_add_extra_codes = ask_user(f'Scrap "extra" codes: ({", ".join(extra_codes)})?')
-
-    for code in [a.text for a in soup.find('div', class_='list-mobile-codes mb-3').find_all('a')]:
-        if not do_add_extra_codes and code in extra_codes:
-            continue
-
-        r = requests.get(f'{DOMAIN}/code/mobile/{code}')
-        soup = BeautifulSoup(r.text, 'lxml')
-
-        table = soup.find('table', class_='table table-bordered table-mobile-phones table-width-auto')
-        columns = [th.text for th in table.thead.tr.find_all('th')]
-
-        code_data = []
-        for tr in table.tbody.find_all('tr'):
-            row_data = {}
-            tds = tr.find_all('td')
-            for i in range(len(columns)):
-                if columns[i] == 'Вид номеров':
-                    values = tds[i].get_text('\n').split('\n')
-                    if len(values) == 1:
-                        value = values
-                    else:
-                        prefix = values[0][:-len(values[1])]
-                        value = [values[0]] + [prefix + v for v in values[1:]]
-                elif columns[i] == 'Диапазон номеров':
-                    values = tds[i].get_text('\n').split('\n')
-                    value = [
-                        [int(n) for n in v.replace(f'+7 {code}', '').replace(' ', '').split('...')]
-                        for v in values
-                    ]
-                elif columns[i] == 'Кол-во номеров':
-                    value = int(tds[i].text.replace(' ', ''))
-                else:
-                    value = tds[i].text
-                row_data[columns[i]] = value
-            code_data.append(row_data)
-        data[code] = code_data
-        print(f'Scrapped data for code: {code}')
+    for code, frm, to, cap, operator, region in _rows_from_csv(path):
+        data.setdefault(code, []).append({
+            'Регион РФ': region,
+            'Оператор': operator,
+            'Диапазон номеров': [[frm, to]],
+            'Кол-во номеров': cap,
+        })
+    if not data:
+        sys.exit(f'No valid rows parsed from {path}. Is it the DEF-9xx CSV?')
+    data['last_update'] = date.today().strftime('%d.%m.%Y')
     return data
 
 
+def try_download(path: Path) -> bool:
+    import requests  # only needed for the optional auto-download
+    try:
+        r = requests.get(SOURCE_URL, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
+        if b';' not in r.content[:2000]:  # got an HTML/captcha page, not the CSV
+            return False
+        path.write_bytes(r.content)
+        return True
+    except Exception as e:
+        print(f'Auto-download failed: {e}')
+        return False
+
+
 def main() -> dict:
-    r = requests.get(DOMAIN + '/code/mobile')
-    soup = BeautifulSoup(r.text, 'lxml')
+    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CSV
+    if not csv_path.exists():
+        print(f'CSV not found: {csv_path}')
+        if not (ask_user(f'Try downloading from {SOURCE_URL}?') and try_download(csv_path)):
+            sys.exit(
+                f'\nDownload DEF-9xx.csv manually from:\n  {SOURCE_PAGE}\n'
+                f'then run:  python scrap_phone_codes.py <path-to-DEF-9xx.csv>'
+            )
+        print(f'Downloaded -> {csv_path}')
 
-    last_updates_text = soup.find('p', class_='mt-3 mb-1 fst-italic').get_text('\n')
-    date_website = datetime.strptime(
-        re.search(r'\d{2}\.\d{2}\.\d{4}(?=.)', last_updates_text).group(0), '%d.%m.%Y'
-    )
-
-    if is_update_needed(date_website):
-        data = scrap_codes_info(soup)
-        data['last_update'] = date_website.strftime('%d.%m.%Y')
-        with open(FILEPATH_JSON, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-    else:
-        if not FILEPATH_JSON.exists():
-            print('Для продолжения нужно спарсить данные...')
-            exit()
-        with open(FILEPATH_JSON, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    data = csv_to_data(csv_path)
+    with open(FILEPATH_JSON, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+    print(f'Wrote {FILEPATH_JSON} ({len(data) - 1} codes)')
     return data
 
 
