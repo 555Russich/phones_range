@@ -43,19 +43,37 @@ def _read_text(path: Path) -> str:
 
 
 def _rows_from_csv(path: Path):
-    # Parsed by column position (code;from;to;capacity;operator;region;...) so it
-    # survives header-text changes; delimiter sniffed from the header line.
+    # Columns are located by header name, not position: the official file has a
+    # placeholder "Регион" column (literally "-") plus an extra ИНН column, so the
+    # real location lives in "Территория ГАР". Delimiter sniffed from the header.
     lines = _read_text(path).splitlines()
     if not lines:
         return
     delim = max(';\t,', key=lines[0].count)
-    for row in csv.reader(lines[1:], delimiter=delim):  # skip header
-        if len(row) < 6:
+    rows = csv.reader(lines, delimiter=delim)
+    header = [h.strip().lower() for h in next(rows)]
+
+    def col(*names, default):
+        for i, h in enumerate(header):
+            if any(n in h for n in names):
+                return i
+        return default
+
+    i_code = col('def', 'авс', 'код', default=0)
+    i_from, i_to, i_cap, i_op = col('от', default=1), col('до', default=2), col('емкость', default=3), col('оператор', default=4)
+    i_reg = col('территория', default=None)      # real region; prefer it over the
+    if i_reg is None:                             # "-" placeholder "Регион" column
+        i_reg = col('регион', default=5)
+    need = max(i_code, i_from, i_to, i_op, i_reg)
+
+    for row in rows:
+        if len(row) <= need:
             continue
-        code, frm, to, cap, operator, region = (c.strip() for c in row[:6])
+        code, frm, to = row[i_code].strip(), row[i_from].strip(), row[i_to].strip()
         if not (code.isdigit() and frm.isdigit() and to.isdigit()):
             continue
-        yield code, int(frm), int(to), int(cap) if cap.isdigit() else int(to) - int(frm) + 1, operator, region
+        cap = row[i_cap].strip() if i_cap < len(row) else ''
+        yield code, int(frm), int(to), int(cap) if cap.isdigit() else int(to) - int(frm) + 1, row[i_op].strip(), row[i_reg].strip()
 
 
 def csv_to_data(path: Path) -> dict:

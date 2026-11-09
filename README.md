@@ -57,19 +57,24 @@ options:
   -o OPERATOR, --operator OPERATOR
 ```
 
+Filter values must match the `--list-*` output exactly — in the official
+registry operators are full legal names (e.g. `ПАО "МТС"`, `ООО "Т2 МОБАЙЛ"`)
+and regions come from the ГАР territory (e.g. `Краснодарский край`). List them
+first, then copy the value you want.
+
 Examples:
 
-Generate all possible phones:
+Generate all possible phones (huge — hundreds of millions of numbers, filter instead):
 
 `python3 gen_dict.py`
 
 Region filter: 
 
-`python3 gen_dict.py -r "Московская область и г. Москва"`
+`python3 gen_dict.py -r "Московская область"`
 
 Operator filter:
 
-`python3 gen_dict.py -o МТС`
+`python3 gen_dict.py -o 'ПАО "МТС"'`
 
 All regions to stdout:
 
