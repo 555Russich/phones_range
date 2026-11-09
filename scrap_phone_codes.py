@@ -30,19 +30,32 @@ def ask_user(question: str) -> bool:
     return answer == 'y'
 
 
+def _read_text(path: Path) -> str:
+    # Portal has served UTF-8 and (historically) Windows-1251; try strict ones
+    # first so a real cp1251 file doesn't get mis-decoded as cp1252.
+    raw = path.read_bytes()
+    for enc in ('utf-8-sig', 'cp1251', 'cp1252'):  # the two real cases + a safety net
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8', 'replace')
+
+
 def _rows_from_csv(path: Path):
-    # Official file: Windows-1251, ';'-separated, one header row.
-    # Parsed by column position (code;from;to;capacity;operator;region;...)
-    # so it survives header-text changes.
-    with open(path, encoding='cp1251', newline='') as f:
-        next(f, None)  # header
-        for row in csv.reader(f, delimiter=';'):
-            if len(row) < 6:
-                continue
-            code, frm, to, cap, operator, region = (c.strip() for c in row[:6])
-            if not (code.isdigit() and frm.isdigit() and to.isdigit()):
-                continue
-            yield code, int(frm), int(to), int(cap) if cap.isdigit() else int(to) - int(frm) + 1, operator, region
+    # Parsed by column position (code;from;to;capacity;operator;region;...) so it
+    # survives header-text changes; delimiter sniffed from the header line.
+    lines = _read_text(path).splitlines()
+    if not lines:
+        return
+    delim = max(';\t,', key=lines[0].count)
+    for row in csv.reader(lines[1:], delimiter=delim):  # skip header
+        if len(row) < 6:
+            continue
+        code, frm, to, cap, operator, region = (c.strip() for c in row[:6])
+        if not (code.isdigit() and frm.isdigit() and to.isdigit()):
+            continue
+        yield code, int(frm), int(to), int(cap) if cap.isdigit() else int(to) - int(frm) + 1, operator, region
 
 
 def csv_to_data(path: Path) -> dict:
